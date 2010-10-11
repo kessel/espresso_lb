@@ -45,7 +45,8 @@
 int transfer_momentum = 0;
 
 /** Struct holding the Lattice Boltzmann parameters */
-LB_Parameters lbpar = { 0.0, 0.0, -1.0, -1.0, -1.0, 0.0, { 0.0, 0.0, 0.0} };
+LB_Parameters lbpar = { 0.0, 0.0, -1.0, -1.0, -1.0, 0.0, { 0.0, 0.0, 0.0},0.,0. };
+
 
 /** The DnQm model to be used. */
 LB_Model lbmodel = { 19, d3q19_lattice, d3q19_coefficients, d3q19_w, NULL, 1./3. };
@@ -1123,9 +1124,9 @@ void lb_reinit_parameters() {
   }
   
   //gamma_odd = gamma_even = gamma_bulk = gamma_shear;
-  gamma_odd = -0.8;
-  gamma_even = -.8;
-
+  gamma_odd = lbpar.gamma_odd;
+  gamma_even = lbpar.gamma_even;
+////
   //fprintf(stderr,"%f %f %f %f\n",gamma_shear,gamma_bulk,gamma_even,gamma_odd);
 
   double mu = 0.0;
@@ -2971,6 +2972,56 @@ static int lbfluid_parse_ext_force(Tcl_Interp *interp, int argc, char *argv[], i
   return TCL_ERROR;
 #endif
 }
+
+static int lbfluid_parse_gamma_odd(Tcl_Interp *interp, int argc, char *argv[], int *change) {
+
+    double g;
+
+    if (argc < 1) {
+	Tcl_AppendResult(interp, "gamma_odd requires 1 argument", (char *)NULL);
+	return TCL_ERROR;
+    }
+    if (!ARG0_IS_D(g)) {
+	Tcl_AppendResult(interp, "wrong argument for gamma_odd", (char *)NULL);
+	return TCL_ERROR;
+    }
+    if (fabs( g > 1.0)) {
+	Tcl_AppendResult(interp, "fabs(gamma_odd) must be > 1.", (char *)NULL);
+	return TCL_ERROR;
+    }
+
+    *change = 1;
+    lbpar.gamma_odd= g;
+
+    mpi_bcast_lb_params(LBPAR_AGRID);
+ 
+    return TCL_OK;
+}
+
+static int lbfluid_parse_gamma_even(Tcl_Interp *interp, int argc, char *argv[], int *change) {
+
+    double g;
+
+    if (argc < 1) {
+	Tcl_AppendResult(interp, "gamma_even requires 1 argument", (char *)NULL);
+	return TCL_ERROR;
+    }
+    if (!ARG0_IS_D(g)) {
+	Tcl_AppendResult(interp, "wrong argument for gamma_even", (char *)NULL);
+	return TCL_ERROR;
+    }
+    if (fabs( g > 1.0)) {
+	Tcl_AppendResult(interp, "fabs(gamma_even) must be > 1.", (char *)NULL);
+	return TCL_ERROR;
+    }
+
+    *change = 1;
+    lbpar.gamma_even= g;
+
+    mpi_bcast_lb_params(LBPAR_AGRID);
+ 
+    return TCL_OK;
+}
 #endif /* LB */
 
 /** Parser for the \ref lbnode command. */
@@ -3052,6 +3103,10 @@ int lbfluid_cmd(ClientData data, Tcl_Interp *interp, int argc, char **argv) {
 	  err = lbfluid_parse_friction(interp, argc-1, argv+1, &change);
       else if (ARG0_IS_S("ext_force"))
 	  err = lbfluid_parse_ext_force(interp, argc-1, argv+1, &change);
+      else if (ARG0_IS_S("gamma_odd"))
+	  err = lbfluid_parse_gamma_odd(interp, argc-1, argv+1, &change);
+      else if (ARG0_IS_S("gamma_even"))
+	  err = lbfluid_parse_gamma_even(interp, argc-1, argv+1, &change);
       else {
 	  Tcl_AppendResult(interp, "unknown feature \"", argv[0],"\" of lbfluid", (char *)NULL);
 	  err = TCL_ERROR ;
