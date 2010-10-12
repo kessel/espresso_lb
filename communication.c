@@ -2658,7 +2658,7 @@ void mpi_recv_fluid_border_flag(int node, int index, int *border) {
 void mpi_recv_fluid_border_flag_slave(int node, int index) {
 #ifdef LB_BOUNDARIES
   if (node==this_node) {
-    double data;
+    int data;
     lb_local_fields_get_border_flag(index, &data);
     MPI_Send(&data, 1, MPI_INTEGER, 0, REQ_LB_GET_BORDER_FLAG, MPI_COMM_WORLD);
   }

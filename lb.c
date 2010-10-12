@@ -1169,7 +1169,7 @@ void lb_reinit_parameters() {
     lb_coupl_pref = 0.0;
   }
 
-  LB_TRACE(fprintf(stderr,"%d: gamma_shear=%f gamma_bulk=%f shear_fluct=%f bulk_fluct=%f mu=%f, bulkvisc=%f\n",this_node,gamma_shear,gamma_bulk,lb_phi[9],lb_phi[4],mu, lbpar.bulk_viscosity));
+  LB_TRACE(fprintf(stderr,"%d: gamma_shear=%f gamma_bulk=%f shear_fluct=%f bulk_fluct=%f mu=%f, bulkvisc=%f, gamma_dd=%f, gamma_even=%f\n",this_node,gamma_shear,gamma_bulk,lb_phi[9],lb_phi[4],mu, lbpar.bulk_viscosity, gamma_odd, gamma_even));
 
   //LB_TRACE(fprintf(stderr,"%d: phi[4]=%f phi[5]=%f phi[6]=%f phi[7]=%f phi[8]=%f phi[9]=%f\n",this_node,lb_phi[4],lb_phi[5],lb_phi[6],lb_phi[7],lb_phi[8],lb_phi[9]));
 
