@@ -49,7 +49,6 @@
 #define LBPAR_BULKVISC  6 /**< fluid bulk viscosity */
 
 /*@}*/
-
   /** Some general remarks:
    * This file implements the LB D3Q19 method to Espresso. The LB_Model
    * construction is preserved for historical reasons and might be removed
@@ -107,7 +106,7 @@ typedef struct {
   /** local stress tensor */
   double pi[6];
 
-  /** local populations of the velocity directions
+  /* local populations of the velocity directions
    *  are stored seperately to achieve higher performance */
 
   /** flag indicating whether a force is acting on the node */
@@ -151,7 +150,7 @@ typedef struct {
   double friction;
 
   /** external force applied to the fluid at each lattice site (MD units) */
-  double ext_force[3]; /* TODO: local force or global force? */
+  double ext_force[3]; /* Open question: Do we want a local force or global force? */
   double rho_lb_units;
   double gamma_odd;
   double gamma_even;
@@ -230,9 +229,8 @@ void lb_set_local_fields(LB_FluidNode *node, const double rho, const double *v, 
  */
 void lb_get_local_fields(LB_FluidNode *node, double *rho, double *j, double *pi);
 
-/** Calculates the equilibrium distributions TODO: What does it mean?*/
+/** Calculates the equilibrium distributions. */
 void lb_calc_n_equilibrium(const index_t index, const double rho, const double *j, double *pi);
-
 
 /** Propagates the Lattice Boltzmann system for one time step.
  * This function performs the collision step and the streaming step.
@@ -514,13 +512,15 @@ MDINLINE void lb_local_fields_get_border_flag(index_t index, int *border) {
 }
 #endif
 
-#endif /* LB */
-
+#endif
 /** Parser for the \ref lbnode command. */
 int lbnode_cmd(ClientData data, Tcl_Interp *interp, int argc, char **argv);
+#ifdef LB
 
+#endif
 /** Parser for the TCL command \ref lbfluid. */
 int lbfluid_cmd(ClientData data, Tcl_Interp *interp, int argc, char **argv);
+#ifdef LB
 
 /** Calculate the local fluid momentum.
  * The calculation is implemented explicitly for the special case of D3Q19.
@@ -532,6 +532,41 @@ MDINLINE void lb_get_populations(index_t index, double* pop) {
     pop[i]=lbfluid[0][i][index]+lbmodel.coeff[i][0]*lbpar.rho;
   }
 }
+
+/* A C level interface to the LB fluid */ 
+int lb_lbfluid_set_density(double p_dens);
+int lb_lbfluid_set_agrid(double p_agrid);
+int lb_lbfluid_set_visc(double p_visc);
+int lb_lbfluid_set_tau(double p_tau);
+int lb_lbfluid_set_bulk_visc(double p_bulk_visc);
+int lb_lbfluid_set_gamma_odd(double p_gamma_odd);
+int lb_lbfluid_set_gamma_even(double p_gamma_even);
+int lb_lbfluid_set_ext_force(double p_fx, double p_fy, double p_fz);
+int lb_lbfluid_set_friction(double p_friction);
+
+int lb_lbfluid_get_density(double* p_dens);
+int lb_lbfluid_get_agrid(double* p_agrid);
+int lb_lbfluid_get_visc(double* p_visc);
+int lb_lbfluid_get_bulk_visc(double* p_bulk_visc);
+int lb_lbfluid_get_tau(double* p_tau);
+int lb_lbfluid_get_gamma_odd(double* p_gamma_odd);
+int lb_lbfluid_get_gamma_even(double* p_gamma_even);
+int lb_lbfluid_get_ext_force(double* p_fx, double* p_fy, double* p_fz);
+int lb_lbfluid_get_friction(double* p_friction);
+
+int lb_lbnode_get_rho(int* ind, double* p_rho);
+int lb_lbnode_get_u(int* ind, double* u);
+int lb_lbnode_get_pi(int* ind, double* pi);
+int lb_lbnode_get_pi_neq(int* ind, double* pi_neq);
+int lb_lbnode_get_pop(int* ind, double* pop);
+
+int lb_lbnode_set_rho(int* ind, double rho);
+int lb_lbnode_set_u(int* ind, double* u);
+int lb_lbnode_set_pi(int* ind, double* pi);
+int lb_lbnode_set_pi_neq(int* ind, double* pi_neq);
+int lb_lbnode_set_pop(int* ind, double* pop);
+
+#endif /* LB */
 
 #endif /* LB_H */
 

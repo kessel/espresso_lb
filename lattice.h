@@ -106,7 +106,7 @@ void init_lattice(Lattice *lattice, double agrid, double tau);
  *  taken as global coordinates and are returned as local coordinates.
  *
  * \param  lattice pointer to the lattice
- * \param  ind     global coordinates of the lattice site (Input)
+ * \param  ind     global coordinates of the lattice site (Input, and Output!)
  * \param  grid     local coordinates of the lattice site (Output)
  * \return         index of the node for the lattice site
  */

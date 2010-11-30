@@ -28,17 +28,112 @@
 
 #ifdef LB_BOUNDARIES
 
-int n_lb_boundaries       = 0;
+
+int n_lb_boundaries        = 0;
 LB_Boundary *lb_boundaries = NULL;
 
+/** Reallocates space for the LB boundaries */
+LB_Boundary *generate_lb_boundary();
+
+static void lb_init_boundary_wall(Constraint_wall* wall); 
+static void lb_init_boundary_sphere(Constraint_sphere* sphere); 
+static void lb_init_boundary_cylinder(Constraint_cylinder* cylinder); 
+
+
+/********** TCL Interface ************/
+int lb_boundary(ClientData _data, Tcl_Interp *interp, int argc, char **argv);
+int printLbBoundaryToResult(Tcl_Interp *interp, int i);
+int lb_boundary_print_all(Tcl_Interp *interp);
+int lb_boundary_wall(LB_Boundary *lbb, Tcl_Interp *interp, int argc, char **argv);
+int lb_boundary_sphere(LB_Boundary *lbb, Tcl_Interp *interp, int argc, char **argv);
+int lb_boundary_cylinder(LB_Boundary *lbb, Tcl_Interp *interp, int argc, char **argv);
+
+    
+void lb_boundary_conditions()
+{
+
+/* Add different bounce back methods here */
+   lb_bounce_back();
+/* switch (lb_boundary_par.type) {
+
+  case LB_BOUNDARY_NONE:
+    break;
+  case LB_BOUNDARY_BOUNCE_BACK:
+    lb_bounce_back();
+    break;
+  case LB_BOUNDARY_SPECULAR_REFLECTION:
+    lb_specular_reflections();
+    break;
+  case LB_BOUNDARY_SLIP_REFLECTION:
+    lb_slip_reflection();
+    break;
+  case LB_BOUNDARY_PARTIAL_SLIP:
+    //lb_partial_slip();
+    break;
+
+  } */
+}
+#endif 
+
+/** The lb_boundary command */
+int lb_boundary(ClientData _data, Tcl_Interp *interp,
+	       int argc, char **argv)
+{
 #ifdef LB_BOUNDARIES
+  int status, c_num;
 
-//    LB_Boundary lb_boundary_par = { LB_BOUNDARY_NONE, 0.0 }; //do we need this?
 
+  if (argc < 2) return lb_boundary_print_all(interp);
+  
+  if(!strncmp(argv[1], "wall", strlen(argv[1]))) {
+    status = lb_boundary_wall(generate_lb_boundary(),interp, argc - 2, argv + 2);
+    mpi_bcast_lb_boundary(-1);
+  }
+  else if(!strncmp(argv[1], "sphere", strlen(argv[1]))) {
+    status = lb_boundary_sphere(generate_lb_boundary(),interp, argc - 2, argv + 2);
+    mpi_bcast_lb_boundary(-1);
+  }
+  else if(!strncmp(argv[1], "cylinder", strlen(argv[1]))) {
+    status = lb_boundary_cylinder(generate_lb_boundary(),interp, argc - 2, argv + 2);
+    mpi_bcast_lb_boundary(-1);
+  }
+  else if(!strncmp(argv[1], "delete", strlen(argv[1]))) {
+    if(argc < 3) {
+      /* delete all */
+      mpi_bcast_lb_boundary(-2);
+      status = TCL_OK;
+    }
+    else {
+      if(Tcl_GetInt(interp, argv[2], &(c_num)) == TCL_ERROR) return (TCL_ERROR);
+      if(c_num < 0 || c_num >= n_lb_boundaries) {
+	Tcl_AppendResult(interp, "Can not delete non existing lb_boundary",(char *) NULL);
+	return (TCL_ERROR);
+      }
+      mpi_bcast_lb_boundary(c_num);
+      status = TCL_OK;    
+    }
+  }
+  else if (argc == 2 && Tcl_GetInt(interp, argv[1], &c_num) == TCL_OK) {
+    printLbBoundaryToResult(interp, c_num);
+    status = TCL_OK;
+  }
+  else {
+    Tcl_AppendResult(interp, "possible lb_boundaries: wall sphere cylinder lb_boundary delete {c} to delete lb_boundary or lb_boundaries",(char *) NULL);
+    return (TCL_ERROR);
+  }
+
+  return mpi_gather_runtime_errors(interp, status);
+
+#else /* !defined(LB_BOUNDARIES) */
+  Tcl_AppendResult(interp, "LB_BOUNDARIES not compiled in!" ,(char *) NULL);
+  return (TCL_ERROR);
+#endif /* LB_BOUNDARIES */
+}
+
+#ifdef LB_BOUNDARIES
 /** Initialize a planar boundary specified by a wall constraint.
  * @param plane The \ref Constraint_wall struct describing the boundary.
  */
-
 int printLbBoundaryToResult(Tcl_Interp *interp, int i)
 {
   LB_Boundary *lbb = &lb_boundaries[i];
@@ -111,21 +206,6 @@ int lb_boundary_print_all(Tcl_Interp *interp)
   return (TCL_OK);
 }
 
-/*void printLbBoundaryForceToResult(Tcl_Interp *interp, int con)
-{
-  double f[3];
-  char buffer[TCL_DOUBLE_SPACE];
-
-  mpi_get_lb_boundary_force(lbb, f);
-
-  Tcl_PrintDouble(interp, f[0], buffer);
-  Tcl_AppendResult(interp, buffer, " ", (char *) NULL);
-  Tcl_PrintDouble(interp, f[1], buffer);
-  Tcl_AppendResult(interp, buffer, " ", (char *) NULL);
-  Tcl_PrintDouble(interp, f[2], buffer);
-  Tcl_AppendResult(interp, buffer, (char *) NULL);
-}*/
-
 LB_Boundary *generate_lb_boundary()
 {
   n_lb_boundaries++;
@@ -142,10 +222,7 @@ int lb_boundary_wall(LB_Boundary *lbb, Tcl_Interp *interp,
   double norm;
   lbb->type = LB_BOUNDARY_WAL;
   /* invalid entries to start of */
-  lbb->c.wal.n[0] = 
-    lbb->c.wal.n[1] = 
-    lbb->c.wal.n[2] = 0;
-  lbb->c.wal.d = 0;
+  lbb->c.wal.n[0] = lbb->c.wal.n[1] = lbb->c.wal.n[2] = 0; lbb->c.wal.d = 0;
   while (argc > 0) {
     if(!strncmp(argv[0], "normal", strlen(argv[0]))) {
       if(argc < 4) {
@@ -359,148 +436,90 @@ int lb_boundary_cylinder(LB_Boundary *lbb, Tcl_Interp *interp,
   return (TCL_OK);
 }
 
-#endif /* LB_BOUNDARIES */
-
-int lb_boundary(ClientData _data, Tcl_Interp *interp,
-	       int argc, char **argv)
-{
-#ifdef LB_BOUNDARIES
-  int status, c_num;
-
-
-  if (argc < 2) return lb_boundary_print_all(interp);
-  
-  if(!strncmp(argv[1], "wall", strlen(argv[1]))) {
-    status = lb_boundary_wall(generate_lb_boundary(),interp, argc - 2, argv + 2);
-    mpi_bcast_lb_boundary(-1);
-  }
-  else if(!strncmp(argv[1], "sphere", strlen(argv[1]))) {
-    status = lb_boundary_sphere(generate_lb_boundary(),interp, argc - 2, argv + 2);
-    mpi_bcast_lb_boundary(-1);
-  }
-  else if(!strncmp(argv[1], "cylinder", strlen(argv[1]))) {
-    status = lb_boundary_cylinder(generate_lb_boundary(),interp, argc - 2, argv + 2);
-    mpi_bcast_lb_boundary(-1);
-  }
-  else if(!strncmp(argv[1], "delete", strlen(argv[1]))) {
-    if(argc < 3) {
-      /* delete all */
-      mpi_bcast_lb_boundary(-2);
-      status = TCL_OK;
-    }
-    else {
-      if(Tcl_GetInt(interp, argv[2], &(c_num)) == TCL_ERROR) return (TCL_ERROR);
-      if(c_num < 0 || c_num >= n_lb_boundaries) {
-	Tcl_AppendResult(interp, "Can not delete non existing lb_boundary",(char *) NULL);
-	return (TCL_ERROR);
-      }
-      mpi_bcast_lb_boundary(c_num);
-      status = TCL_OK;    
-    }
-  }
-  else if (argc == 2 && Tcl_GetInt(interp, argv[1], &c_num) == TCL_OK) {
-    printLbBoundaryToResult(interp, c_num);
-    status = TCL_OK;
-  }
-  else {
-    Tcl_AppendResult(interp, "possible lb_boundaries: wall sphere cylinder lb_boundary delete {c} to delete lb_boundary or lb_boundaries",(char *) NULL);
-    return (TCL_ERROR);
-  }
-
-  return mpi_gather_runtime_errors(interp, status);
-
-#else /* !defined(LB_BOUNDARIES) */
-  Tcl_AppendResult(interp, "LB_BOUNDARIES not compiled in!" ,(char *) NULL);
-  return (TCL_ERROR);
-#endif /* LB_BOUNDARIES */
-}
-
-#ifdef LB_BOUNDARIES
-
-static void lb_init_boundary_wall(Constraint_wall* wall) {
-  int x, y, z, index, node_domain_position[3], offset[3];
-  double pos[3], dist, dist_vec[3];
-	
-	map_node_array(this_node, node_domain_position); //constraint contains MD coordinates, therefore the conversion
-	
-	offset[0] = node_domain_position[0]*lblattice.grid[0];
-	offset[1] = node_domain_position[1]*lblattice.grid[1];
-	offset[2] = node_domain_position[2]*lblattice.grid[2];
-  
-  for (z=1; z<=lblattice.grid[2]; z++) {
-    for (y=1; y<=lblattice.grid[1]; y++) {
-	    for (x=1; x<=lblattice.grid[0]; x++) {
-	    
-	      pos[0] = (offset[0]+(x-1))*lblattice.agrid;
-	      pos[1] = (offset[1]+(y-1))*lblattice.agrid;
-	      pos[2] = (offset[2]+(z-1))*lblattice.agrid;
-       
-        calculate_wall_dist((Particle*) NULL, pos, (Particle*) NULL, wall, &dist, dist_vec);
-                
-  	    if (dist <= 0) {
-   	      lbfields[get_linear_index(x,y,z,lblattice.halo_grid)].boundary = 1;     
- 	      }
-      }
-    }
-  }
-}
-
-static void lb_init_boundary_sphere(Constraint_sphere* sphere) {
-  int x, y, z, index, node_domain_position[3], offset[3];
-  double pos[3], dist, dist_vec[3];
-	
-	map_node_array(this_node, node_domain_position); //constraint contains MD coordinates, therefore the conversion
-	
-	offset[0] = node_domain_position[0]*lblattice.grid[0];
-	offset[1] = node_domain_position[1]*lblattice.grid[1];
-	offset[2] = node_domain_position[2]*lblattice.grid[2];
-  
-  for (z=1; z<=lblattice.grid[2]; z++) {
-    for (y=1; y<=lblattice.grid[1]; y++) {
-	    for (x=1; x<=lblattice.grid[0]; x++) {	    
-	      pos[0] = (offset[0]+(x-1))*lblattice.agrid;
-	      pos[1] = (offset[1]+(y-1))*lblattice.agrid;
-	      pos[2] = (offset[2]+(z-1))*lblattice.agrid;
-       
-        calculate_sphere_dist((Particle*) NULL, pos, (Particle*) NULL, sphere, &dist, dist_vec);
-        
-  	    if (dist <= 0)
-   	      lbfields[get_linear_index(x,y,z,lblattice.halo_grid)].boundary = 1;   
-      }
-    }
-  }
-}
-
-static void lb_init_boundary_cylinder(Constraint_cylinder* cylinder) {
-  int x, y, z, index, node_domain_position[3], offset[3];
-  double pos[3], dist, dist_vec[3];
-	
-	map_node_array(this_node, node_domain_position);
-	
-	offset[0] = node_domain_position[0]*lblattice.grid[0];
-	offset[1] = node_domain_position[1]*lblattice.grid[1];
-	offset[2] = node_domain_position[2]*lblattice.grid[2];
-  
-  for (z=1; z<=lblattice.grid[2]; z++) {
-    for (y=1; y<=lblattice.grid[1]; y++) {
-	    for (x=1; x<=lblattice.grid[0]; x++) {	    
-	      pos[0] = (offset[0]+(x-1))*lblattice.agrid;
-	      pos[1] = (offset[1]+(y-1))*lblattice.agrid;
-	      pos[2] = (offset[2]+(z-1))*lblattice.agrid;
-       
-        calculate_cylinder_dist((Particle*) NULL, pos, (Particle*) NULL, cylinder, &dist, dist_vec);
-        
-  	    if (dist <= 0) {
-   	      lbfields[get_linear_index(x,y,z,lblattice.halo_grid)].boundary = 1;   
-        }
-      }
-    }
-  }
-}
+//static void lb_init_boundary_wall(Constraint_wall* wall) {
+//  int x, y, z, index, node_domain_position[3], offset[3];
+//  double pos[3], dist, dist_vec[3];
+//	
+//	map_node_array(this_node, node_domain_position); //constraint contains MD coordinates, therefore the conversion
+//	
+//	offset[0] = node_domain_position[0]*lblattice.grid[0];
+//	offset[1] = node_domain_position[1]*lblattice.grid[1];
+//	offset[2] = node_domain_position[2]*lblattice.grid[2];
+//  
+//  for (z=1; z<=lblattice.grid[2]; z++) {
+//    for (y=1; y<=lblattice.grid[1]; y++) {
+//	    for (x=1; x<=lblattice.grid[0]; x++) {
+//	    
+//	      pos[0] = (offset[0]+(x-1))*lblattice.agrid;
+//	      pos[1] = (offset[1]+(y-1))*lblattice.agrid;
+//	      pos[2] = (offset[2]+(z-1))*lblattice.agrid;
+//       
+//        calculate_wall_dist((Particle*) NULL, pos, (Particle*) NULL, wall, &dist, dist_vec);
+//                
+//  	    if (dist <= 0) {
+//   	      lbfields[get_linear_index(x,y,z,lblattice.halo_grid)].boundary = 1;     
+// 	      }
+//      }
+//    }
+//  }
+//}
+//
+//static void lb_init_boundary_sphere(Constraint_sphere* sphere) {
+//  int x, y, z, index, node_domain_position[3], offset[3];
+//  double pos[3], dist, dist_vec[3];
+//	
+//	map_node_array(this_node, node_domain_position); //constraint contains MD coordinates, therefore the conversion
+//	
+//	offset[0] = node_domain_position[0]*lblattice.grid[0];
+//	offset[1] = node_domain_position[1]*lblattice.grid[1];
+//	offset[2] = node_domain_position[2]*lblattice.grid[2];
+//  
+//  for (z=1; z<=lblattice.grid[2]; z++) {
+//    for (y=1; y<=lblattice.grid[1]; y++) {
+//	    for (x=1; x<=lblattice.grid[0]; x++) {	    
+//	      pos[0] = (offset[0]+(x-1))*lblattice.agrid;
+//	      pos[1] = (offset[1]+(y-1))*lblattice.agrid;
+//	      pos[2] = (offset[2]+(z-1))*lblattice.agrid;
+//       
+//        calculate_sphere_dist((Particle*) NULL, pos, (Particle*) NULL, sphere, &dist, dist_vec);
+//        
+//  	    if (dist <= 0)
+//   	      lbfields[get_linear_index(x,y,z,lblattice.halo_grid)].boundary = 1;   
+//      }
+//    }
+//  }
+//}
+//
+//static void lb_init_boundary_cylinder(Constraint_cylinder* cylinder) {
+//  int x, y, z, index, node_domain_position[3], offset[3];
+//  double pos[3], dist, dist_vec[3];
+//	
+//	map_node_array(this_node, node_domain_position);
+//	
+//	offset[0] = node_domain_position[0]*lblattice.grid[0];
+//	offset[1] = node_domain_position[1]*lblattice.grid[1];
+//	offset[2] = node_domain_position[2]*lblattice.grid[2];
+//  
+//  for (z=1; z<=lblattice.grid[2]; z++) {
+//    for (y=1; y<=lblattice.grid[1]; y++) {
+//	    for (x=1; x<=lblattice.grid[0]; x++) {	    
+//	      pos[0] = (offset[0]+(x-1))*lblattice.agrid;
+//	      pos[1] = (offset[1]+(y-1))*lblattice.agrid;
+//	      pos[2] = (offset[2]+(z-1))*lblattice.agrid;
+//       
+//        calculate_cylinder_dist((Particle*) NULL, pos, (Particle*) NULL, cylinder, &dist, dist_vec);
+//        
+//  	    if (dist <= 0) {
+//   	      lbfields[get_linear_index(x,y,z,lblattice.halo_grid)].boundary = 1;   
+//        }
+//      }
+//    }
+//  }
+//}
 
 /** Initialize boundary conditions for all constraints in the system. */
 void lb_init_boundaries() {
-  int n, x, y, z, index, node_domain_position[3], offset[3];
+  int n, x, y, z, node_domain_position[3], offset[3];
   char *errtxt;
   double pos[3], dist, dist_tmp, dist_vec[3];
 	
@@ -513,7 +532,10 @@ void lb_init_boundaries() {
   for (n=0;n<lblattice.halo_grid_volume;n++) {
     lbfields[n].boundary = 0;
   }
-  
+
+  /* Got through the lattice and determine for every lattice node
+   * the closest boundary, and if it is within this boundary (dist<0)
+   * or nor. */
   for (z=1; z<=lblattice.grid[2]; z++) {
     for (y=1; y<=lblattice.grid[1]; y++) {
 	    for (x=1; x<=lblattice.grid[0]; x++) {	    
@@ -552,36 +574,7 @@ void lb_init_boundaries() {
   }
 }
 
-/** Initialize boundary conditions for all constraints in the system. */
-/*void lb_init_boundaries() {
-  int n;
-  char *errtxt;
-  
-  //printf("executing lb_init_boundaries on node %d\n", this_node);
-
-  for (n=0;n<lblattice.halo_grid_volume;n++) {
-    lbfields[n].boundary = 0;
-  }
-
-  for (n=0;n<n_lb_boundaries;n++) {
-    switch (lb_boundaries[n].type) {
-    case LB_BOUNDARY_WAL:
-      lb_init_boundary_wall(&lb_boundaries[n].c.wal);
-      break;
-    case LB_BOUNDARY_SPH:
-      lb_init_boundary_sphere(&lb_boundaries[n].c.sph);
-      break;
-    case LB_BOUNDARY_CYL:
-      lb_init_boundary_cylinder(&lb_boundaries[n].c.cyl);
-      break;
-    default:
-      errtxt = runtime_error(128);
-      ERROR_SPRINTF(errtxt, "{109 lb_boundary type %d not implemented in lb_init_boundaries()\n",lb_boundaries[n].type);
-    }
-  }
-}*/
-
-
+#if 0
 static int lbboundaries_parse_slip_reflection(Tcl_Interp *interp, int argc, char **argv) {
 #if 0 //problems with slip_pref (georg, 03.08.10)
   if (argc <1) {
@@ -619,8 +612,6 @@ static int lbboundaries_parse_partial_slip(Tcl_Interp *interp, int argc, char **
   return TCL_OK;
 #endif //if 0
 }
-
-#endif /* LB_BOUNDARIES */
 
 /** Parser for the \ref lbfluid command. */
 int lbboundaries_cmd(ClientData data, Tcl_Interp *interp, int argc, char **argv) {
@@ -661,7 +652,13 @@ int lbboundaries_cmd(ClientData data, Tcl_Interp *interp, int argc, char **argv)
   Tcl_AppendResult(interp, "LB_BOUNDARIES not compiled in!", NULL);
   return TCL_ERROR;
 #endif /* LB_BOUNDARIES */
-#endif //if 0
 }
+
+#endif 
+#endif /* disabled */
+
 #endif /* LB_BOUNDARIES */
+
+
+
 

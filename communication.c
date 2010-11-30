@@ -2584,8 +2584,12 @@ void mpi_send_exclusion_slave(int part1, int part2)
 /************** REQ_SET_FLUID **************/
 void mpi_send_fluid(int node, int index, double rho, double *j, double *pi) {
 #ifdef LB
+  double v[3];
   if (node==this_node) {
-    lb_calc_n_equilibrium(index, rho, j, pi);
+    v[0]=j[0]/rho;
+    v[1]=j[1]/rho;
+    v[2]=j[2]/rho;
+    lb_calc_n_equilibrium(index, rho, v, pi);
   } else {
     double data[10] = { rho, j[0], j[1], j[2], pi[0], pi[1], pi[2], pi[3], pi[4], pi[5] };
     mpi_issue(REQ_SET_FLUID, node, index);
@@ -2596,10 +2600,13 @@ void mpi_send_fluid(int node, int index, double rho, double *j, double *pi) {
 
 void mpi_send_fluid_slave(int node, int index) {
 #ifdef LB
+  int i;
   if (node==this_node) {
     double data[10];
     MPI_Status status;
     MPI_Recv(data, 10, MPI_DOUBLE, 0, REQ_SET_FLUID, MPI_COMM_WORLD, &status);
+    for (i=1; i<4; i++)
+      data[i]/=data[0];
     lb_calc_n_equilibrium(index, data[0], &data[1], &data[4]);
   }
 #endif
@@ -2649,7 +2656,7 @@ void mpi_recv_fluid_border_flag(int node, int index, int *border) {
     int data;
     mpi_issue(REQ_LB_GET_BORDER_FLAG, node, index);
     MPI_Status status;
-    MPI_Recv(&data, 1, MPI_INTEGER, node, REQ_LB_GET_BORDER_FLAG, MPI_COMM_WORLD, &status);
+    MPI_Recv(&data, 1, MPI_INT, node, REQ_LB_GET_BORDER_FLAG, MPI_COMM_WORLD, &status);
     *border = data;
   }
 #endif
@@ -2660,7 +2667,7 @@ void mpi_recv_fluid_border_flag_slave(int node, int index) {
   if (node==this_node) {
     int data;
     lb_local_fields_get_border_flag(index, &data);
-    MPI_Send(&data, 1, MPI_INTEGER, 0, REQ_LB_GET_BORDER_FLAG, MPI_COMM_WORLD);
+    MPI_Send(&data, 1, MPI_INT, 0, REQ_LB_GET_BORDER_FLAG, MPI_COMM_WORLD);
   }
 #endif
 }
@@ -2755,7 +2762,6 @@ void mpi_recv_fluid_populations(int node, int index, double *pop) {
   if (node==this_node) {
     lb_get_populations(index, pop);
   } else {
-    double data[10];
     mpi_issue(REQ_GET_FLUID_POP, node, index);
     MPI_Status status;
     MPI_Recv(pop, 19, MPI_DOUBLE, node, REQ_GET_FLUID, MPI_COMM_WORLD, &status);

@@ -19,8 +19,34 @@
  * Boundary conditions for Lattice Boltzmann fluid dynamics.
  * Header file for \ref lb-boundaries.c.
  *
+ * In principle this module allows to use different boundary conditions 
+ * in LB. Currently only 
+ * Link Bounce Back is implemented. Experimental versions for
+ * other boundaries are still in the code, but commented out.
+ * They were written by Ulf Schiller, but have not been
+ * merged to the code. It is not fully clear what they do
+ * and how to use them. 
+ *
+ *
+ * The Link Bounce Back method reflects all population in the
+ * boundary to where they came from in the same LB step. The function
+ * \ref lb_bounce_back() sweeps the whole lattice looking for 
+ * sites with activated flag LB_BOUNDARY_BOUNCE_BACK and performs the 
+ * reflection. This happens after a full (ordinary) LB sweep
+ * within lb_propagate(), so that for the next step the reflected
+ * populations are in their post-reflection cell. It this happens 
+ * on the lbfluid[1] (=post-collision) populations, before 
+ * swapping the pointers lbfluid[1] and lbfluid[0].
+ *
+ * 
+ * The lb_boundary command needs for a boundary of a particular
+ * shape a \ref constraint counterpart. The idea is, that the 
+ * dist function of the corresponding constraint contains the
+ * information which LB nodes are inside the boundary, and which are 
+ * not. 
+ *
+ *
  */
-
 #ifndef LB_BOUNDARIES_H
 #define LB_BOUNDARIES_H
 #include <tcl.h>
@@ -32,7 +58,8 @@
 
 #ifdef LB_BOUNDARIES
 
-/** No constraint applied */
+/* These constants are used to distinguish between
+ * different boudary implementation. */
 #define LB_BOUNDARY_NONE                0
 #define LB_BOUNDARY_BOUNCE_BACK         1
 #define LB_BOUNDARY_SPECULAR_REFLECTION 2
@@ -46,12 +73,16 @@
 /** (finite) cylinder shaped constraint applied */
 #define LB_BOUNDARY_CYL 3
 
-/** Structure to specify a boundary. */
+/** Structure that contains a boundary. The boundary
+ * geometry is stored in the corresponding Constraint datatype
+ * */
 typedef struct {
   /** type of the boundary. */
   int type;
+  /** slippage prefactor. Currently without function */
   double slip_pref;
 
+  /** */
   union {
     Constraint_wall wal;
     Constraint_sphere sph;
@@ -60,26 +91,40 @@ typedef struct {
 } LB_Boundary;
 /*@}*/
 
-//extern LB_Boundary lb_boundary_par;
+extern int n_lb_boundaries;        /** Contains the number of boundaries */
+extern LB_Boundary *lb_boundaries; /** Array that contains the actual boundaries by pointers */
 
-MDINLINE void lb_calc_modes();
+/** The lb_boundary TCL command.
+ * Its arguments are identical to the \ref constraint command 
+ * and an LB boundary of the same shape is constructed. Only the
+ * shapes sphere, cylinder and wall are currently implemented, but
+ * other shapes are easy to add, if the corresponding constraint 
+ * is available.
+ * */
+int lb_boundary(ClientData _data, Tcl_Interp *interp,
+	       int argc, char **argv);
 
-/** Initializes the constrains in the system. 
+/** Apply boundary conditions to the LB fluid. 
+ * Currenly just calls \ref lb_bounce_back, which applies 
+ * the link bounce back method to all nodes. */
+void lb_boundary_conditions();
+
+
+/**
  *  This function determines the lattice sited which belong to boundaries
  *  and marks them with a corresponding flag. 
  */
 void lb_init_boundaries();
-int lb_boundary(ClientData _data, Tcl_Interp *interp,
-	       int argc, char **argv);
 
-/** Bounce back boundary conditions.
+/** Apply Bounce back boundary conditions to all nodes.
  * The populations that have propagated into a boundary node
  * are bounced back to the node they came from. This results
  * in no slip boundary conditions.
  *
  * [cf. Ladd and Verberg, J. Stat. Phys. 104(5/6):1191-1251, 2001]
  */
-MDINLINE void lb_bounce_back() {
+MDINLINE void lb_bounce_back() 
+{
 
 #ifdef D3Q19
 #ifndef PULL
@@ -115,47 +160,8 @@ MDINLINE void lb_bounce_back() {
       for (i=0; i<19; i++) {
         lbfluid[1][reverse[i]][k-next[i]]   = lbfluid[1][i][k];
       }
-
-//      /* bounce back to lower indices */
-//      lbfluid[1][reverse[5]][k-next[5]]   = lbfluid[1][5][k];
-//      lbfluid[1][reverse[11]][k-next[11]] = lbfluid[1][11][k];
-//      lbfluid[1][reverse[14]][k-next[14]] = lbfluid[1][14][k];
-//      lbfluid[1][reverse[15]][k-next[15]] = lbfluid[1][15][k];
-//      lbfluid[1][reverse[18]][k-next[18]] = lbfluid[1][18][k];
-//
-//      /* delete populations in the wall */
-//      lbfluid[1][5][k]  = - lbmodel.coeff[5][0]*lbpar.rho_lb_units; 
-//      lbfluid[1][11][k] = - lbmodel.coeff[11][0]*lbpar.rho_lb_units;
-//      lbfluid[1][14][k] = - lbmodel.coeff[14][0]*lbpar.rho_lb_units;
-//      lbfluid[1][15][k] = - lbmodel.coeff[15][0]*lbpar.rho_lb_units;
-//      lbfluid[1][18][k] = - lbmodel.coeff[18][0]*lbpar.rho_lb_units;
-
     }
-
   }
-  
-  /* top-down sweep */
-//  for (k=lblattice.halo_grid_volume-lblattice.halo_offset-1;k>=0;k--) {
-//
-//    if (lbfields[k].boundary) {
-//
-//      /* bounce back to higher indices */
-//      lbfluid[1][reverse[6]][k-next[6]]   = lbfluid[1][6][k];
-//      lbfluid[1][reverse[12]][k-next[12]] = lbfluid[1][12][k];
-//      lbfluid[1][reverse[13]][k-next[13]] = lbfluid[1][13][k];
-//      lbfluid[1][reverse[16]][k-next[16]] = lbfluid[1][16][k];
-//      lbfluid[1][reverse[17]][k-next[17]] = lbfluid[1][17][k];
-//      
-//      /* delete populations in the wall */
-//      lbfluid[1][6][k]  = - lbmodel.coeff[6][0]*lbpar.rho_lb_units;
-//      lbfluid[1][12][k] = - lbmodel.coeff[12][0]*lbpar.rho_lb_units;
-//      lbfluid[1][13][k] = - lbmodel.coeff[13][0]*lbpar.rho_lb_units;
-//      lbfluid[1][16][k] = - lbmodel.coeff[16][0]*lbpar.rho_lb_units;
-//      lbfluid[1][17][k] = - lbmodel.coeff[17][0]*lbpar.rho_lb_units;
-//
-//    }
-//
-//  }
 #else
 #error Bounce back boundary conditions are only implemented for PUSH scheme!
 #endif
@@ -164,6 +170,12 @@ MDINLINE void lb_bounce_back() {
 #endif
 }
 
+/********************************************************
+ *   ONLY EXPERIMENTAL CODE BELOW!!!!!!!!!
+ *
+ *******************************************************/
+
+#if 0
 /** Specular reflections at boundaries.
  * The populations that have propagated into a boundary node
  * are reflected in the direction perpendicular to the wall.
@@ -1788,7 +1800,7 @@ MDINLINE void lb_boundary_equilibrium_push(int index, double *mode) {
 #endif
 }
 
-MDINLINE void lb_boundary_collisions(int index, double *modes) {
+boundary_collisions(int index, double *modes) {
 
   double rho, v[3], f[3];
 
@@ -3686,39 +3698,9 @@ MDINLINE void lb_set_boundary_node(int index, double rho, double *v, double *pi)
 #endif //if 0
 }
 
-/** Apply boundary conditions to the LB fluid. */
-MDINLINE void lb_boundary_conditions() {
-   lb_bounce_back();
-#if 0 //problems with slip_pref (georg, 03.08.10)
-  switch (lb_boundary_par.type) {
-
-  case LB_BOUNDARY_NONE:
-    break;
-  case LB_BOUNDARY_BOUNCE_BACK:
-    lb_bounce_back();
-    break;
-  case LB_BOUNDARY_SPECULAR_REFLECTION:
-    lb_specular_reflections();
-    break;
-  case LB_BOUNDARY_SLIP_REFLECTION:
-    lb_slip_reflection();
-    break;
-  case LB_BOUNDARY_PARTIAL_SLIP:
-    //lb_partial_slip();
-    break;
-
-  }
-#endif //if 0
-}
-
-
-/** Parser for the \ref lbfluid command. */
-int lbboundaries_cmd(ClientData data, Tcl_Interp *interp, int argc, char **argv);
-
-
-extern int n_lb_boundaries;
-extern LB_Boundary *lb_boundaries;
+#endif /* disabled */
 
 #endif /* LB_BOUNDARIES */
 
 #endif /* LB_BOUNDARIES_H */
+
